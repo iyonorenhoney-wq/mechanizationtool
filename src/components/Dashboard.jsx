@@ -24,7 +24,7 @@ import {
 import { format, startOfDay, isSameDay, parseISO, isAfter, isBefore, addDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
+const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick, onFilteredList }) => {
   const { projects, settings } = data;
   const today = startOfDay(new Date());
 
@@ -61,8 +61,8 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 className="text-2xl" style={{ fontWeight: 800, color: 'var(--text)' }}>BizFlow Dashboard</h1>
-          <p className="text-sm text-muted">今日もお疲れ様です。本日の状況を確認しましょう。</p>
+          <h1 className="text-2xl" style={{ fontWeight: 800, color: 'var(--text)' }}>BizFlow ダッシュボード</h1>
+          <p className="text-sm text-muted">チーム "{settings.companyName}" の状況を確認しましょう。</p>
         </div>
         <button 
           onClick={onCalendarClick}
@@ -86,17 +86,40 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div className="card" style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)' }}>
+        <div 
+          onClick={() => onFilteredList('received')}
+          className="card clickable" 
+          style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.2s' }}
+        >
           <div className="text-muted text-xs font-bold uppercase tracking-wider mb-2">依頼中</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>{statusSummary.received} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>{statusSummary.received} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+            <ArrowRight size={18} className="text-muted" />
+          </div>
         </div>
-        <div className="card" style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)' }}>
+        
+        <div 
+          onClick={() => onFilteredList('active')}
+          className="card clickable" 
+          style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.2s' }}
+        >
           <div className="text-muted text-xs font-bold uppercase tracking-wider mb-2">進行中</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>{statusSummary.active} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)' }}>{statusSummary.active} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+            <ArrowRight size={18} className="text-primary" />
+          </div>
         </div>
-        <div className="card" style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)' }}>
+
+        <div 
+          onClick={() => onFilteredList('completed')}
+          className="card clickable" 
+          style={{ padding: '1.25rem', background: 'white', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.2s' }}
+        >
           <div className="text-muted text-xs font-bold uppercase tracking-wider mb-2">完了済み</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>{statusSummary.completed} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success)' }}>{statusSummary.completed} <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-muted)' }}>件</span></div>
+            <ArrowRight size={18} className="text-success" />
+          </div>
         </div>
       </div>
 
@@ -105,7 +128,7 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ fontWeight: 800, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Clock size={20} className="text-primary" />
-              直近の予定
+              直近の予定 (共有)
             </h3>
             <button onClick={onCalendarClick} style={{ color: 'var(--primary)', fontSize: '0.875rem', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}>
               すべて見る
@@ -117,6 +140,7 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
               <div 
                 key={`${item.id}-${item.type}`}
                 onClick={() => onProjectClick(item.id)}
+                className="schedule-item"
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -125,8 +149,7 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
                   background: 'var(--surface-alt)', 
                   border: '1px solid var(--border)',
                   cursor: 'pointer',
-                  transition: 'transform 0.2s',
-                  hover: { transform: 'translateX(4px)' }
+                  transition: 'transform 0.2s'
                 }}
               >
                 <div style={{ 
@@ -172,35 +195,31 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
         <div style={{ display: 'grid', gap: '1.5rem' }}>
           <div className="card" style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)', color: 'white', border: 'none' }}>
             <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1rem', color: 'rgba(255,255,255,0.8)' }}>
-              クイックアクション
+              共有クイックアクション
             </h3>
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <button 
                 onClick={() => onCalendarClick()}
                 style={{ width: '100%', padding: '0.875rem', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', fontWeight: 600, textAlign: 'left', cursor: 'pointer' }}>
-                予定を確認する
+                チーム全体の予定を確認
               </button>
               <button 
                 onClick={onAddClick}
                 style={{ width: '100%', padding: '0.875rem', borderRadius: '10px', background: 'white', border: 'none', color: '#4f46e5', fontWeight: 800, textAlign: 'left', cursor: 'pointer' }}>
-                案件を登録する
+                新しい案件を登録する
               </button>
             </div>
           </div>
 
           <div className="card" style={{ padding: '1.5rem' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1.125rem', marginBottom: '1.25rem' }}>会社情報</h3>
+            <h3 style={{ fontWeight: 800, fontSize: '1.125rem', marginBottom: '1.25rem' }}>所属チーム</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              {settings.logo ? (
-                <img src={settings.logo} alt="Logo" style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
-              ) : (
-                <div style={{ width: '40px', height: '40px', background: 'var(--surface-alt)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Users size={20} className="text-muted" />
-                </div>
-              )}
+              <div style={{ width: '40px', height: '40px', background: 'var(--surface-alt)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={20} className="text-primary" />
+              </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: '0.925rem' }}>{settings.companyName}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{settings.address || '住所未設定'}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{projects.length} 件の案件を共有中</div>
               </div>
             </div>
           </div>

@@ -18,14 +18,17 @@ import {
   Building,
   Info,
   AlertTriangle,
-  Clock
+  Clock,
+  TrendingUp
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DataService, STATUS_ORDER, STATUS_LABELS, STATUS_COLORS } from '../services/DataService';
+import { StorageService } from '../services/StorageService';
 import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 
-const ProjectDetail = ({ project, onBack, settings }) => {
+const ProjectDetail = ({ project, onBack, settings, user }) => {
   const [activeTab, setActiveTab] = useState('timeline');
   const [editBilling, setEditBilling] = useState(false);
   const [internalError, setInternalError] = useState(null);
@@ -84,20 +87,43 @@ const ProjectDetail = ({ project, onBack, settings }) => {
     setEditBilling(false);
   };
 
-  const handleFileUpload = (type) => {
-    const name = prompt('書類名を入力してください:', `${STATUS_LABELS[type] || 'その他'}_書類`);
-    if (name) {
-      const newDoc = {
-        id: crypto.randomUUID(),
-        type,
-        name,
-        date: new Date().toISOString(),
-        url: '#'
-      };
-      DataService.updateProject(project.id, { 
-        documents: [...(project.documents || []), newDoc] 
-      });
+  const handleFileUpload = async (e, category = 'others') => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const fileData = await StorageService.uploadFile(project.id, file, category);
+      const updatedDocs = [...(project.documents || []), fileData];
+      await DataService.updateProject(project.id, { documents: updatedDocs });
+    } catch (err) {
+      alert('ファイルのアップロードに失敗しました。');
     }
+  };
+
+  const handleCreateFromTemplate = async (templateId) => {
+    try {
+      const newFile = await StorageService.createFromTemplate(project.id, templateId);
+      const updatedDocs = [...(project.documents || []), newFile];
+      await DataService.updateProject(project.id, { documents: updatedDocs });
+      alert('テンプレートから文書を作成しました。');
+    } catch (err) {
+      alert('テンプレートの作成に失敗しました。');
+    }
+  };
+
+  const exportBudgetToExcel = () => {
+    const data = [
+      ['項目', '金額 (¥)'],
+      ['工事費 (労務費)', project.budget?.labor || 0],
+      ['材料費', project.budget?.materials || 0],
+      ['その他費用', project.budget?.others || 0],
+      ['合計', (project.budget?.labor || 0) + (project.budget?.materials || 0) + (project.budget?.others || 0)]
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "予算書");
+    XLSX.writeFile(wb, `予算書_${project.propertyName}.xlsx`);
   };
 
   const generatePDF = (type) => {
@@ -145,8 +171,8 @@ const ProjectDetail = ({ project, onBack, settings }) => {
       <div className="card" style={{ padding: '0.5rem', display: 'flex', justifyContent: 'space-around', marginBottom: '1.5rem', background: 'var(--surface-alt)', borderRadius: '16px', border: 'none' }}>
         {[
           { id: 'timeline', label: '進捗', icon: <Clock size={16} /> },
-          { id: 'info', label: '詳細情報', icon: <Info size={16} /> },
-          { id: 'documents', label: '関連書類', icon: <FileText size={16} /> },
+          { id: 'info', label: '詳細・予算', icon: <Info size={16} /> },
+          { id: 'documents', label: '関連書類 (Excel)', icon: <FileText size={16} /> },
         ].map(tab => (
           <button 
             key={tab.id}
@@ -278,12 +304,32 @@ const ProjectDetail = ({ project, onBack, settings }) => {
                       )}
                     </div>
                     {isCurrent && (status === 'proposal' || status === 'report' || status === 'quote' || status === 'invoiced') && (
-                      <button 
-                        onClick={() => handleFileUpload(status)}
-                        style={{ color: 'var(--primary)', background: 'white', border: '1px solid var(--border)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow)' }}
-                      >
-                        <Upload size={18} />
-                      </button>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          type="file" 
+                          id={`upload-${status}`}
+                          style={{ display: 'none' }}
+                          onChange={(e) => handleFileUpload(e, status)}
+                        />
+                        <label 
+                          htmlFor={`upload-${status}`}
+                          style={{ 
+                            cursor: 'pointer',
+                            color: 'var(--primary)', 
+                            background: 'white', 
+                            border: '1px solid var(--border)', 
+                            width: '36px', 
+                            height: '36px', 
+                            borderRadius: '50%', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            boxShadow: 'var(--shadow)' 
+                          }}
+                        >
+                          <Upload size={18} />
+                        </label>
+                      </div>
                     )}
                   </div>
                 );
@@ -330,7 +376,7 @@ const ProjectDetail = ({ project, onBack, settings }) => {
             </div>
           </div>
 
-          <div className="card" style={{ borderRadius: '24px' }}>
+          <div className="card" style={{ borderRadius: '24px', marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <h3 style={{ fontWeight: 800, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <CreditCard size={20} color="var(--primary)" />
@@ -385,39 +431,163 @@ const ProjectDetail = ({ project, onBack, settings }) => {
               </div>
             )}
           </div>
+
+          <div className="card" style={{ borderRadius: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontWeight: 800, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <TrendingUp size={20} color="var(--primary)" />
+                実行予算管理
+              </h3>
+              <button 
+                onClick={exportBudgetToExcel}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  padding: '0.5rem 1rem', 
+                  background: '#10b981', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '10px', 
+                  fontSize: '0.8125rem', 
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                <FileDown size={16} /> Excel出力
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>工事費 (労務費)</label>
+                <input 
+                  type="number" 
+                  value={project.budget?.labor || 0}
+                  onChange={(e) => DataService.updateProject(project.id, { budget: { ...(project.budget || {}), labor: parseInt(e.target.value) || 0 } })}
+                  style={{ width: '100%', background: 'none', border: 'none', fontSize: '1.25rem', fontWeight: 800, outline: 'none', color: 'var(--text)' }}
+                />
+              </div>
+              <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>材料費</label>
+                <input 
+                  type="number" 
+                  value={project.budget?.materials || 0}
+                  onChange={(e) => DataService.updateProject(project.id, { budget: { ...(project.budget || {}), materials: parseInt(e.target.value) || 0 } })}
+                  style={{ width: '100%', background: 'none', border: 'none', fontSize: '1.25rem', fontWeight: 800, outline: 'none', color: 'var(--text)' }}
+                />
+              </div>
+              <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>その他</label>
+                <input 
+                  type="number" 
+                  value={project.budget?.others || 0}
+                  onChange={(e) => DataService.updateProject(project.id, { budget: { ...(project.budget || {}), others: parseInt(e.target.value) || 0 } })}
+                  style={{ width: '100%', background: 'none', border: 'none', fontSize: '1.25rem', fontWeight: 800, outline: 'none', color: 'var(--text)' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '1.25rem', background: 'var(--surface-alt)', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--text-muted)' }}>合計予算</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 900, color: 'var(--primary)' }}>
+                ¥ {((project?.budget?.labor || 0) + (project?.budget?.materials || 0) + (project?.budget?.others || 0)).toLocaleString()}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {activeTab === 'documents' && (
         <div className="fade-in card" style={{ borderRadius: '24px' }}>
+          <div style={{ marginBottom: '2rem' }}>
+            <h4 style={{ fontSize: '0.75rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '0.05em' }}>テンプレートから新規作成</h4>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {StorageService.getTemplates().map(template => (
+                <button 
+                  key={template.id}
+                  onClick={() => handleCreateFromTemplate(template.id)}
+                  style={{ 
+                    padding: '0.6rem 1rem', 
+                    borderRadius: '10px', 
+                    background: 'white', 
+                    border: '1px solid var(--border)', 
+                    fontSize: '0.8125rem', 
+                    fontWeight: 700, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <Plus size={16} /> {template.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1.125rem' }}>プロジェクト関連書類</h3>
-            <button onClick={() => handleFileUpload('other')} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', fontWeight: 800, color: 'var(--primary)', background: 'rgba(37,99,235,0.05)', padding: '0.5rem 1rem', borderRadius: '10px', border: 'none' }}>
-              <Plus size={18} /> 新規アップロード
-            </button>
+            <h3 style={{ fontWeight: 800, fontSize: '1.125rem' }}>クラウド保存済み書類</h3>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type="file" 
+                id="upload-other"
+                style={{ display: 'none' }}
+                onChange={(e) => handleFileUpload(e, 'other')}
+              />
+              <label 
+                htmlFor="upload-other"
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.375rem', 
+                  fontSize: '0.8125rem', 
+                  fontWeight: 800, 
+                  color: 'var(--primary)', 
+                  background: 'rgba(37,99,235,0.05)', 
+                  padding: '0.5rem 1rem', 
+                  borderRadius: '10px', 
+                  cursor: 'pointer'
+                }}
+              >
+                <Upload size={18} /> ファイルをアップロード
+              </label>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gap: '1rem' }}>
             {(project.documents || []).length > 0 ? project.documents.map(doc => (
               <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1.25rem', background: 'var(--surface-alt)', borderRadius: '16px', border: '1px solid var(--border)', transition: 'transform 0.2s' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
-                  <FileText size={28} />
+                <div style={{ 
+                  width: '48px', 
+                  height: '48px', 
+                  borderRadius: '12px', 
+                  background: doc.name.endsWith('.xlsx') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(37, 99, 235, 0.1)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  color: doc.name.endsWith('.xlsx') ? '#10b981' : 'var(--primary)', 
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.05)' 
+                }}>
+                  {doc.name.endsWith('.xlsx') ? <FileDown size={28} /> : <FileText size={28} />}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.925rem', color: 'var(--text)' }}>{doc.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.25rem' }}>{safeFormatDate(doc.date, 'yyyy年MM月dd日')} • {STATUS_LABELS[doc.type] || 'その他'}</div>
+                  <div style={{ fontWeight: 800, fontSize: '0.925rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {doc.name}
+                    {doc.isTemplateCopy && <span style={{ fontSize: '0.625rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>TEMPLATE</span>}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.25rem' }}>{safeFormatDate(doc.date || doc.uploadedAt, 'yyyy年MM月dd日')} • {STATUS_LABELS[doc.category || doc.type] || '書類'}</div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {(doc.type === 'quote' || doc.type === 'invoiced') && (
-                    <button 
-                      onClick={() => generatePDF(doc.type)}
-                      style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'white', border: '1px solid var(--border)' }}
-                    >
-                      <FileDown size={20} />
-                    </button>
-                  )}
-                  <button style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                    <MoreVertical size={20} />
+                  <button 
+                    onClick={() => {
+                      if (doc.url === '#') alert('クラウド上のファイルを準備中...');
+                      else window.open(doc.url, '_blank');
+                    }}
+                    style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'white', border: '1px solid var(--border)', cursor: 'pointer' }}
+                  >
+                    <FileDown size={20} />
                   </button>
                 </div>
               </div>
@@ -425,7 +595,7 @@ const ProjectDetail = ({ project, onBack, settings }) => {
               <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '20px', border: '2px dashed var(--border)' }}>
                 <FileText size={56} style={{ opacity: 0.1, marginBottom: '1.5rem' }} />
                 <p style={{ fontWeight: 700, fontSize: '1rem' }}>保存された書類はありません</p>
-                <p style={{ fontSize: '0.8125rem', marginTop: '0.5rem' }}>見積書や完了報告書をアップロード・管理できます。</p>
+                <p style={{ fontSize: '0.8125rem', marginTop: '0.5rem' }}>Excel案件ファイルをクラウドで一元管理できます。</p>
               </div>
             )}
           </div>

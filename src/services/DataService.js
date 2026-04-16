@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'construction_management_data';
+const STORAGE_KEY = 'bizflow_mock_firestore';
 
 export const STATUS_ORDER = [
   'received', 
@@ -43,20 +43,29 @@ const INITIAL_DATA = {
   projects: [],
   settings: {
     logo: null,
-    companyName: '株式会社 〇〇工事',
+    companyName: '株式会社 住宅建設',
     address: '',
-    isAdmin: true, // For simulation
+    isAdmin: true,
   },
 };
 
 export const DataService = {
-  get: () => {
+  get: async (companyId) => {
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 300));
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (!data) return INITIAL_DATA;
       const parsed = JSON.parse(data);
+      
+      // Filter projects by companyId if provided
+      const projects = parsed.projects || [];
+      const filteredProjects = companyId 
+        ? projects.filter(p => p.companyId === companyId)
+        : projects;
+
       return {
-        projects: parsed.projects || [],
+        projects: filteredProjects,
         settings: { ...INITIAL_DATA.settings, ...(parsed.settings || {}) },
       };
     } catch (e) {
@@ -65,70 +74,79 @@ export const DataService = {
     }
   },
 
-  save: (data) => {
+  save: async (data) => {
+    // In a real app, this would be per-document updates.
+    // Here we simulate the whole state for simplicity in the mock.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     window.dispatchEvent(new CustomEvent('data_updated', { detail: data }));
   },
 
-  addProject: (project) => {
-    const data = DataService.get();
+  addProject: async (project, companyId) => {
+    const data = await DataService.get(); // Get all for simulation
     const newProject = {
       id: crypto.randomUUID(),
+      companyId: companyId || 'company-123',
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       status: 'received',
       history: [{ status: 'received', date: new Date().toISOString() }],
       tasks: [],
       notes: '',
-      documents: [], // { type, name, date, url }
-      // Fields from registration
+      documents: [],
       propertyName: '',
       requestContent: '',
       address: '',
       clientName: '',
       memo: '',
-      // Dynamic fields filled during flow
       surveyDate: null,
       constructionDate: null,
-      billingInfo: {
-        name: '',
-        address: '',
-        paymentTerms: '',
-        closingTerms: '',
+      budget: {
+        labor: 0,
+        materials: 0,
+        others: 0,
+        history: []
       },
       ...project,
     };
-    data.projects.push(newProject);
-    DataService.save(data);
+    
+    // In mock, we update the local whole object
+    const fullData = JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(INITIAL_DATA));
+    fullData.projects.push(newProject);
+    await DataService.save(fullData);
     return newProject;
   },
 
-  updateProject: (id, updates) => {
-    const data = DataService.get();
-    const index = data.projects.findIndex(p => p.id === id);
+  updateProject: async (id, updates) => {
+    const fullData = JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(INITIAL_DATA));
+    const index = fullData.projects.findIndex(p => p.id === id);
     if (index !== -1) {
-      const oldStatus = data.projects[index].status;
-      data.projects[index] = { ...data.projects[index], ...updates };
+      const oldStatus = fullData.projects[index].status;
+      fullData.projects[index] = { 
+        ...fullData.projects[index], 
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
       
       if (updates.status && updates.status !== oldStatus) {
-        data.projects[index].history.push({
+        fullData.projects[index].history.push({
           status: updates.status,
           date: new Date().toISOString()
         });
       }
       
-      DataService.save(data);
+      await DataService.save(fullData);
     }
   },
 
-  deleteProject: (id) => {
-    const data = DataService.get();
-    data.projects = data.projects.filter(p => p.id !== id);
-    DataService.save(data);
+  deleteProject: async (id) => {
+    const fullData = JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(INITIAL_DATA));
+    fullData.projects = fullData.projects.filter(p => p.id !== id);
+    await DataService.save(fullData);
   },
 
-  updateSettings: (settings) => {
-    const data = DataService.get();
-    data.settings = { ...data.settings, ...settings };
-    DataService.save(data);
+  updateSettings: async (settings) => {
+    const fullData = JSON.parse(localStorage.getItem(STORAGE_KEY) || JSON.stringify(INITIAL_DATA));
+    fullData.settings = { ...fullData.settings, ...settings };
+    await DataService.save(fullData);
   }
 };
