@@ -24,7 +24,7 @@ import {
 import { format, startOfDay, isSameDay, parseISO, isAfter, isBefore, addDays } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-const Dashboard = ({ data, onProjectClick, onCalendarClick }) => {
+const Dashboard = ({ data, onProjectClick, onCalendarClick, onAddClick }) => {
   const { projects, settings } = data;
   const today = startOfDay(new Date());
 
@@ -36,12 +36,14 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick }) => {
       return (sDate && (isSameDay(sDate, today) || isAfter(sDate, today))) || 
              (cDate && (isSameDay(cDate, today) || isAfter(cDate, today)));
     }).map(p => {
+      if (!p) return null;
       const sDate = p.surveyDate ? parseISO(p.surveyDate) : null;
       const cDate = p.constructionDate ? parseISO(p.constructionDate) : null;
       const isSurvey = sDate && (isSameDay(sDate, today) || isAfter(sDate, today));
       const targetDate = isSurvey ? sDate : cDate;
       return { ...p, targetDate, type: isSurvey ? 'survey' : 'construction' };
-    }).sort((a, b) => a.targetDate - b.targetDate).slice(0, 5);
+    }).filter(item => item !== null && item.targetDate !== null)
+      .sort((a, b) => a.targetDate - b.targetDate).slice(0, 5);
   }, [projects, today]);
 
   // Project status summary
@@ -179,7 +181,7 @@ const Dashboard = ({ data, onProjectClick, onCalendarClick }) => {
                 予定を確認する
               </button>
               <button 
-                onClick={() => onProjectClick(null)} // This could trigger "add" view logic if handled
+                onClick={onAddClick}
                 style={{ width: '100%', padding: '0.875rem', borderRadius: '10px', background: 'white', border: 'none', color: '#4f46e5', fontWeight: 800, textAlign: 'left', cursor: 'pointer' }}>
                 案件を登録する
               </button>

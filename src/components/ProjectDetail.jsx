@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -16,33 +16,49 @@ import {
   Upload,
   CreditCard,
   Building,
-  Info
+  Info,
+  AlertTriangle,
+  Clock
 } from 'lucide-react';
-import { format, parseISO, isBefore, startOfToday } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { DataService, STATUS_ORDER, STATUS_LABELS, STATUS_COLORS } from '../services/DataService';
 import { jsPDF } from 'jspdf';
 
 const ProjectDetail = ({ project, onBack, settings }) => {
-  const [activeTab, setActiveTab] = useState('timeline'); // timeline, info, documents, tasks
-  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [activeTab, setActiveTab] = useState('timeline');
   const [editBilling, setEditBilling] = useState(false);
+  const [internalError, setInternalError] = useState(null);
 
-  if (!project) return <div style={{ padding: '2rem', textAlign: 'center' }}>案件が見つかりません</div>;
+  // Safety first: If no project, return fallback early
+  if (!project) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center' }}>
+        <AlertTriangle size={48} color="var(--danger)" style={{ opacity: 0.5, marginBottom: '1rem' }} />
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>案件データが見つかりません</h2>
+        <button onClick={onBack} style={{ marginTop: '1rem', color: 'var(--primary)', fontWeight: 700 }}>
+          一覧に戻る
+        </button>
+      </div>
+    );
+  }
 
-  const currentStatusIndex = STATUS_ORDER.indexOf(project.status);
-  const today = startOfToday();
+  const currentStatusIndex = STATUS_ORDER.indexOf(project.status || STATUS_ORDER[0]);
 
   const handleUpdateStatus = (status) => {
-    // Basic validation
-    if (status === 'quote') {
-      const hasReport = project.history.some(h => h.status === 'report');
-      if (!hasReport) {
-        alert('見積書を作成する前に、報告書を完了させてください。');
-        return;
+    try {
+      if (status === 'quote') {
+        const hasReport = (project.history || []).some(h => h.status === 'report');
+        if (!hasReport) {
+          alert('見積書を作成する前に、報告書を完了させてください。');
+          return;
+        }
       }
+      DataService.updateProject(project.id, { status });
+    } catch (err) {
+      console.error('Status Update Error:', err);
+      setInternalError('ステータスの更新に失敗しました。');
     }
-    DataService.updateProject(project.id, { status });
   };
 
   const handleGoBack = () => {
@@ -69,14 +85,14 @@ const ProjectDetail = ({ project, onBack, settings }) => {
   };
 
   const handleFileUpload = (type) => {
-    const name = prompt('書類名を入力してください:', `${STATUS_LABELS[type]}_書類`);
+    const name = prompt('書類名を入力してください:', `${STATUS_LABELS[type] || 'その他'}_書類`);
     if (name) {
       const newDoc = {
         id: crypto.randomUUID(),
         type,
         name,
         date: new Date().toISOString(),
-        url: '#' // Simulated
+        url: '#'
       };
       DataService.updateProject(project.id, { 
         documents: [...(project.documents || []), newDoc] 
@@ -85,38 +101,52 @@ const ProjectDetail = ({ project, onBack, settings }) => {
   };
 
   const generatePDF = (type) => {
-    const doc = new jsPDF();
-    const title = type === 'quote' ? '御見積書' : '御請求書';
-    doc.setFont('helvetica', 'normal');
-    doc.text(title, 105, 30, { align: 'center' });
-    doc.text(`${project.propertyName} 様`, 15, 60);
-    doc.text(settings.companyName, 195, 60, { align: 'right' });
-    doc.line(15, 70, 195, 70);
-    doc.text(`案件: ${project.requestContent || '工事一式'}`, 15, 80);
-    doc.save(`${title}_${project.propertyName}.pdf`);
+    try {
+      const doc = new jsPDF();
+      const title = type === 'quote' ? '御見積書' : '御請求書';
+      doc.setFont('helvetica', 'normal');
+      doc.text(title, 105, 30, { align: 'center' });
+      doc.text(`${project.propertyName || 'お客様'} 様`, 15, 60);
+      doc.text(settings?.companyName || '当社', 195, 60, { align: 'right' });
+      doc.line(15, 70, 195, 70);
+      doc.text(`案件: ${project.requestContent || '工事一式'}`, 15, 80);
+      doc.save(`${title}_${project.propertyName}.pdf`);
+    } catch (err) {
+      alert('PDFの生成中にエラーが発生しました。');
+    }
+  };
+
+  const safeFormatDate = (dateStr, formatStr = 'yyyy/MM/dd HH:mm') => {
+    if (!dateStr) return '-/--/--';
+    const date = parseISO(dateStr);
+    return isValid(date) ? format(date, formatStr, { locale: ja }) : '無効な日付';
   };
 
   return (
-    <div className="fade-in">
+    <div className="fade-in" style={{ maxWidth: '800px', margin: '0 auto' }}>
+      {internalError && (
+        <div style={{ padding: '1rem', background: '#fef2f2', color: '#b91c1c', borderRadius: '12px', marginBottom: '1rem', fontWeight: 700 }}>
+          {internalError}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-        <button onClick={onBack} style={{ width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+        <button onClick={onBack} style={{ width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', color: 'var(--text-muted)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
           <ArrowLeft size={20} />
         </button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: STATUS_COLORS[project.status], textTransform: 'uppercase', letterSpacing: '0.05rem' }}>
-            {STATUS_LABELS[project.status]}
+          <div style={{ fontSize: '0.75rem', fontWeight: 800, color: STATUS_COLORS[project.status] || 'var(--primary)', textTransform: 'uppercase' }}>
+            {STATUS_LABELS[project.status] || '不明なステータス'}
           </div>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0 }}>{project.propertyName}</h1>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>{project.propertyName}</h1>
         </div>
-        <button style={{ color: 'var(--text-muted)' }}><MoreVertical size={20} /></button>
       </div>
 
-      <div className="card" style={{ padding: '0.5rem', display: 'flex', justifyContent: 'space-around', marginBottom: '1.5rem', background: 'var(--surface-alt)', borderRadius: '16px' }}>
+      <div className="card" style={{ padding: '0.5rem', display: 'flex', justifyContent: 'space-around', marginBottom: '1.5rem', background: 'var(--surface-alt)', borderRadius: '16px', border: 'none' }}>
         {[
           { id: 'timeline', label: '進捗', icon: <Clock size={16} /> },
-          { id: 'info', label: '詳細', icon: <Info size={16} /> },
-          { id: 'documents', label: '書類', icon: <FileText size={16} /> },
-          { id: 'tasks', label: 'ToDo', icon: <CheckCircle2 size={16} /> },
+          { id: 'info', label: '詳細情報', icon: <Info size={16} /> },
+          { id: 'documents', label: '関連書類', icon: <FileText size={16} /> },
         ].map(tab => (
           <button 
             key={tab.id}
@@ -124,8 +154,8 @@ const ProjectDetail = ({ project, onBack, settings }) => {
             style={{ 
               flex: 1, 
               padding: '0.75rem', 
-              fontSize: '0.8125rem',
-              fontWeight: 700,
+              fontSize: '0.875rem',
+              fontWeight: 800,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -139,46 +169,46 @@ const ProjectDetail = ({ project, onBack, settings }) => {
             }}
           >
             {tab.icon}
-            {tab.label}
+            <span style={{ display: 'inline' }}>{tab.label}</span>
           </button>
         ))}
       </div>
 
       {activeTab === 'timeline' && (
         <div className="fade-in">
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card" style={{ marginBottom: '1.5rem', borderRadius: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontWeight: 800, fontSize: '1rem' }}>工程ステータス</h3>
+              <h3 style={{ fontWeight: 800, fontSize: '1.125rem', margin: 0 }}>工程ワークフロー</h3>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 {currentStatusIndex > 0 && (
                   <button 
                     onClick={handleGoBack}
-                    style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', background: 'var(--surface-alt)', border: '1px solid var(--border)', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    style={{ padding: '0.5rem 1rem', borderRadius: '10px', background: 'white', border: '1px solid var(--border)', fontSize: '0.8125rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text)' }}
                   >
-                    <Undo2 size={14} /> 戻す
+                    <Undo2 size={16} /> 一つ戻す
                   </button>
                 )}
                 {currentStatusIndex < STATUS_ORDER.length - 1 && (
                   <button 
                     onClick={() => handleUpdateStatus(STATUS_ORDER[currentStatusIndex + 1])}
-                    style={{ padding: '0.5rem 1rem', borderRadius: '8px', background: 'var(--primary)', border: 'none', color: 'white', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                    style={{ padding: '0.5rem 1.25rem', borderRadius: '10px', background: 'var(--primary)', border: 'none', color: 'white', fontSize: '0.8125rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.25rem', boxShadow: '0 4px 12px rgba(37,99,235,0.2)' }}
                   >
-                    次へ <ArrowRight size={14} />
+                    進める <ArrowRight size={16} />
                   </button>
                 )}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gap: '1.25rem', position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '11px', top: '10px', bottom: '10px', width: '2px', background: '#f1f5f9' }} />
+            <div style={{ display: 'grid', gap: '1.5rem', position: 'relative', paddingLeft: '0.5rem' }}>
+              <div style={{ position: 'absolute', left: '16px', top: '10px', bottom: '10px', width: '2px', background: '#f1f5f9' }} />
               {STATUS_ORDER.map((status, index) => {
                 const isDone = index < currentStatusIndex;
                 const isCurrent = index === currentStatusIndex;
                 const isPending = index > currentStatusIndex;
-                const historyItem = project.history.find(h => h.status === status);
+                const historyItem = (project.history || []).find(h => h.status === status);
                 
                 return (
-                  <div key={status} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+                  <div key={status} style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
                     <div 
                       onClick={() => handleUpdateStatus(status)}
                       style={{ 
@@ -193,54 +223,66 @@ const ProjectDetail = ({ project, onBack, settings }) => {
                     >
                       {isDone ? <Check size={14} color="white" /> : isCurrent ? <div style={{ width: '8px', height: '8px', background: 'white', borderRadius: '50%' }} /> : null}
                     </div>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, paddingBottom: '0.5rem' }}>
                       <div style={{ 
-                        fontSize: '0.875rem', 
-                        fontWeight: isCurrent ? 800 : 600,
-                        color: isPending ? 'var(--text-muted)' : 'var(--text)'
+                        fontSize: '1rem', 
+                        fontWeight: isCurrent ? 800 : 700,
+                        color: isPending ? 'var(--text-muted)' : 'var(--text)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem'
                       }}>
                         {STATUS_LABELS[status]}
-                        {isCurrent && status === 'survey' && (
-                          <div style={{ marginTop: '0.5rem' }}>
-                            <input 
-                              type="date" 
-                              value={project.surveyDate || ''} 
-                              onChange={(e) => handleUpdateField('surveyDate', e.target.value)}
-                              style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.875rem', width: '100%' }}
-                            />
-                          </div>
-                        )}
-                        {isCurrent && status === 'construction' && (
-                          <div style={{ marginTop: '0.5rem' }}>
-                            <input 
-                              type="date" 
-                              value={project.constructionDate || ''} 
-                              onChange={(e) => handleUpdateField('constructionDate', e.target.value)}
-                              style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.875rem', width: '100%' }}
-                            />
-                          </div>
-                        )}
-                        {isCurrent && status === 'ordered' && (
-                          <div style={{ marginTop: '0.5rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '8px' }}>
-                            <p style={{ fontSize: '0.75rem', marginBottom: '0.5rem', color: 'var(--primary)', fontWeight: 700 }}>受注情報の入力が必要です</p>
-                            <button onClick={() => {setActiveTab('info'); setEditBilling(true)}} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'white', border: '1px solid var(--primary)', padding: '0.4rem 0.8rem', borderRadius: '4px' }}>
-                              請求情報を入力する
-                            </button>
-                          </div>
-                        )}
+                        {isCurrent && <span style={{ fontSize: '0.625rem', padding: '2px 8px', borderRadius: '4px', background: 'var(--primary)', color: 'white', fontWeight: 900 }}>NOW</span>}
                       </div>
+                      
+                      {isCurrent && status === 'survey' && (
+                        <div style={{ marginTop: '0.75rem', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>調査予定日を設定</label>
+                          <input 
+                            type="date" 
+                            value={project.surveyDate || ''} 
+                            onChange={(e) => handleUpdateField('surveyDate', e.target.value)}
+                            style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.875rem', width: '100%', fontWeight: 600 }}
+                          />
+                        </div>
+                      )}
+
+                      {isCurrent && status === 'construction' && (
+                        <div style={{ marginTop: '0.75rem', background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.5rem' }}>工事予定日を設定</label>
+                          <input 
+                            type="date" 
+                            value={project.constructionDate || ''} 
+                            onChange={(e) => handleUpdateField('constructionDate', e.target.value)}
+                            style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.875rem', width: '100%', fontWeight: 600 }}
+                          />
+                        </div>
+                      )}
+
+                      {isCurrent && status === 'ordered' && (
+                        <div style={{ marginTop: '0.75rem', padding: '1.25rem', background: 'rgba(37,99,235,0.05)', borderRadius: '12px', border: '1px dashed var(--primary)' }}>
+                          <p style={{ fontSize: '0.8125rem', marginBottom: '0.75rem', color: 'var(--primary)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <CreditCard size={14} /> 請求情報の入力が必要です
+                          </p>
+                          <button onClick={() => {setActiveTab('info'); setEditBilling(true)}} style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'white', background: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '8px', boxShadow: '0 4px 8px rgba(37,99,235,0.2)' }}>
+                            請求情報を設定する
+                          </button>
+                        </div>
+                      )}
+
                       {historyItem && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          {format(parseISO(historyItem.date), 'yyyy/MM/dd HH:mm')}
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: 500 }}>
+                          完了: {safeFormatDate(historyItem.date)}
                         </div>
                       )}
                     </div>
-                    {(status === 'proposal' || status === 'report' || status === 'quote' || status === 'invoiced') && (
+                    {isCurrent && (status === 'proposal' || status === 'report' || status === 'quote' || status === 'invoiced') && (
                       <button 
                         onClick={() => handleFileUpload(status)}
-                        style={{ color: 'var(--text-muted)', padding: '4px' }}
+                        style={{ color: 'var(--primary)', background: 'white', border: '1px solid var(--border)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow)' }}
                       >
-                        <Upload size={16} />
+                        <Upload size={18} />
                       </button>
                     )}
                   </div>
@@ -253,82 +295,92 @@ const ProjectDetail = ({ project, onBack, settings }) => {
 
       {activeTab === 'info' && (
         <div className="fade-in">
-          <div className="card" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Building size={18} className="text-primary" />
-              物件・依頼情報
+          <div className="card" style={{ marginBottom: '1.5rem', borderRadius: '24px' }}>
+            <h3 style={{ fontWeight: 800, fontSize: '1.125rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Building size={20} color="var(--primary)" />
+              物件・依頼の基本情報
             </h3>
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
-              <div>
-                <label style={{ fontSize: '0.625rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>住所</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.925rem', fontWeight: 600 }}>
-                  <MapPin size={14} className="text-muted" /> {project.address || '未登録'}
+            <div style={{ display: 'grid', gap: '1rem' }}>
+              <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                <label style={{ fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem', display: 'block' }}>所在地・住所</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', fontWeight: 700 }}>
+                  <MapPin size={16} className="text-muted" /> {project.address || '未設定'}
                 </div>
               </div>
-              <div>
-                <label style={{ fontSize: '0.625rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>依頼者名</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.925rem', fontWeight: 600 }}>
-                  <User size={14} className="text-muted" /> {project.clientName || '未登録'}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                  <label style={{ fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem', display: 'block' }}>お客様名</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', fontWeight: 700 }}>
+                    <User size={16} className="text-muted" /> {project.clientName || '未設定'}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                  <label style={{ fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem', display: 'block' }}>自社担当者</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', fontWeight: 700 }}>
+                    <User size={16} className="text-muted" /> {project.staffName || '未設定'}
+                  </div>
                 </div>
               </div>
-              <div>
-                <label style={{ fontSize: '0.625rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>依頼内容</label>
-                <div style={{ fontSize: '0.925rem', fontWeight: 500, background: 'var(--surface-alt)', padding: '0.75rem', borderRadius: '8px', marginTop: '0.25rem' }}>
-                  {project.requestContent || '内容なし'}
+              <div style={{ background: 'var(--surface-alt)', padding: '1rem', borderRadius: '12px' }}>
+                <label style={{ fontSize: '0.625rem', fontWeight: 900, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem', display: 'block' }}>依頼内容・詳細</label>
+                <div style={{ fontSize: '1rem', fontWeight: 600, lineHeight: '1.6', marginTop: '0.25rem' }}>
+                  {project.requestContent || '具体的な内容はまだありません。'}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <CreditCard size={18} className="text-primary" />
-                請求・支払い情報
+          <div className="card" style={{ borderRadius: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ fontWeight: 800, fontSize: '1.125rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CreditCard size={20} color="var(--primary)" />
+                請求・支払い条件
               </h3>
               {!editBilling && (
-                <button onClick={() => setEditBilling(true)} style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)' }}>編集</button>
+                <button onClick={() => setEditBilling(true)} style={{ fontSize: '0.8125rem', fontWeight: 800, color: 'var(--primary)', background: 'rgba(37,99,235,0.05)', padding: '0.4rem 0.8rem', borderRadius: '8px', border: 'none' }}>情報を編集</button>
               )}
             </div>
 
             {editBilling ? (
-              <form onSubmit={handleUpdateBilling} style={{ display: 'grid', gap: '1rem' }}>
+              <form onSubmit={handleUpdateBilling} style={{ display: 'grid', gap: '1.125rem' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>請求先名</label>
-                  <input name="name" defaultValue={project.billingInfo?.name} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.4rem' }}>請求先名（宛名）</label>
+                  <input name="name" defaultValue={project.billingInfo?.name} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 600 }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>請求先住所</label>
-                  <input name="address" defaultValue={project.billingInfo?.address} style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.4rem' }}>請求先住所</label>
+                  <input name="address" defaultValue={project.billingInfo?.address} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 600 }} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>支払い条件</label>
-                    <input name="paymentTerms" defaultValue={project.billingInfo?.paymentTerms} placeholder="例：振込" style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.4rem' }}>支払い方法</label>
+                    <input name="paymentTerms" defaultValue={project.billingInfo?.paymentTerms} placeholder="例：銀行振込" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 600 }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>締め支払い条件</label>
-                    <input name="closingTerms" defaultValue={project.billingInfo?.closingTerms} placeholder="例：月末締め翌月末払い" style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 800, marginBottom: '0.4rem' }}>締め支払い条件</label>
+                    <input name="closingTerms" defaultValue={project.billingInfo?.closingTerms} placeholder="例：月末締翌末払" style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 600 }} />
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <button type="submit" style={{ flex: 1, background: 'var(--primary)', color: 'white', padding: '0.75rem', borderRadius: '8px', border: 'none', fontWeight: 700 }}>保存</button>
-                  <button type="button" onClick={() => setEditBilling(false)} style={{ flex: 1, background: 'var(--surface-alt)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontWeight: 700 }}>キャンセル</button>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <button type="submit" style={{ flex: 2, background: 'var(--primary)', color: 'white', padding: '0.875rem', borderRadius: '12px', border: 'none', fontWeight: 800 }}>保存する</button>
+                  <button type="button" onClick={() => setEditBilling(false)} style={{ flex: 1, background: 'var(--surface-alt)', padding: '0.875rem', borderRadius: '12px', border: '1px solid var(--border)', fontWeight: 800 }}>キャンセル</button>
                 </div>
               </form>
             ) : (
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>請求先</span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{project.billingInfo?.name || '-'}</span>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '12px' }}>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)', fontWeight: 600 }}>請求先</span>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 800 }}>{project.billingInfo?.name || '-'}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>支払い条件</span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{project.billingInfo?.paymentTerms || '-'}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>締め支払い</span>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>{project.billingInfo?.closingTerms || '-'}</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>支払い方法</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 800 }}>{project.billingInfo?.paymentTerms || '-'}</span>
+                  </div>
+                  <div style={{ padding: '1rem', background: 'var(--surface-alt)', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>締め支払い</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 800 }}>{project.billingInfo?.closingTerms || '-'}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -337,88 +389,45 @@ const ProjectDetail = ({ project, onBack, settings }) => {
       )}
 
       {activeTab === 'documents' && (
-        <div className="fade-in card">
+        <div className="fade-in card" style={{ borderRadius: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1rem' }}>関連書類</h3>
-            <button onClick={() => handleFileUpload('other')} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary)', background: 'rgba(37,99,235,0.05)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: 'none' }}>
-              <Plus size={16} /> 書類を追加
+            <h3 style={{ fontWeight: 800, fontSize: '1.125rem' }}>プロジェクト関連書類</h3>
+            <button onClick={() => handleFileUpload('other')} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem', fontWeight: 800, color: 'var(--primary)', background: 'rgba(37,99,235,0.05)', padding: '0.5rem 1rem', borderRadius: '10px', border: 'none' }}>
+              <Plus size={18} /> 新規アップロード
             </button>
           </div>
 
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gap: '1rem' }}>
             {(project.documents || []).length > 0 ? project.documents.map(doc => (
-              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                  <FileText size={24} />
+              <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', padding: '1.25rem', background: 'var(--surface-alt)', borderRadius: '16px', border: '1px solid var(--border)', transition: 'transform 0.2s' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', boxShadow: '0 4px 10px rgba(0,0,0,0.05)' }}>
+                  <FileText size={28} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.875rem' }}>{doc.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{format(parseISO(doc.date), 'yyyy/MM/dd')} • {STATUS_LABELS[doc.type] || 'その他'}</div>
+                  <div style={{ fontWeight: 800, fontSize: '0.925rem', color: 'var(--text)' }}>{doc.name}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '0.25rem' }}>{safeFormatDate(doc.date, 'yyyy年MM月dd日')} • {STATUS_LABELS[doc.type] || 'その他'}</div>
                 </div>
-                <button 
-                  onClick={() => generatePDF(doc.type)}
-                  style={{ width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'white' }}
-                >
-                  <FileDown size={18} />
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {(doc.type === 'quote' || doc.type === 'invoiced') && (
+                    <button 
+                      onClick={() => generatePDF(doc.type)}
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', background: 'white', border: '1px solid var(--border)' }}
+                    >
+                      <FileDown size={20} />
+                    </button>
+                  )}
+                  <button style={{ width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                    <MoreVertical size={20} />
+                  </button>
+                </div>
               </div>
             )) : (
-              <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                <FileText size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
-                <p>書類はまだありません</p>
+              <div style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-muted)', background: 'var(--surface-alt)', borderRadius: '20px', border: '2px dashed var(--border)' }}>
+                <FileText size={56} style={{ opacity: 0.1, marginBottom: '1.5rem' }} />
+                <p style={{ fontWeight: 700, fontSize: '1rem' }}>保存された書類はありません</p>
+                <p style={{ fontSize: '0.8125rem', marginTop: '0.5rem' }}>見積書や完了報告書をアップロード・管理できます。</p>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'tasks' && (
-        <div className="fade-in">
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (newTaskTitle) {
-                DataService.updateProject(project.id, { 
-                  tasks: [...(project.tasks || []), { id: crypto.randomUUID(), title: newTaskTitle, completed: false }] 
-                });
-                setNewTaskTitle('');
-              }
-            }} 
-            style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}
-          >
-            <input 
-              placeholder="新しいタスクを入力..."
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              style={{ flex: 1, padding: '0.875rem', borderRadius: '12px', border: '1px solid var(--border)', fontSize: '0.925rem' }}
-            />
-            <button type="submit" style={{ background: 'var(--primary)', color: 'white', padding: '0.875rem', borderRadius: '12px', border: 'none' }}>
-              <Plus size={20} />
-            </button>
-          </form>
-
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            {(project.tasks || []).map(task => (
-              <div 
-                key={task.id} 
-                className="card" 
-                onClick={() => {
-                  const newTasks = project.tasks.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t);
-                  DataService.updateProject(project.id, { tasks: newTasks });
-                }}
-                style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', background: task.completed ? 'var(--surface-alt)' : 'white' }}
-              >
-                {task.completed ? <CheckCircle2 size={20} className="text-success" /> : <Circle size={20} className="text-muted" />}
-                <span style={{ 
-                  fontSize: '0.925rem', 
-                  fontWeight: 600,
-                  textDecoration: task.completed ? 'line-through' : 'none',
-                  color: task.completed ? 'var(--text-muted)' : 'var(--text)'
-                }}>
-                  {task.title}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       )}
