@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   TrendingUp,
   Award,
-  Download
+  Download,
+  Calendar
 } from 'lucide-react';
 import { DataService } from './services/DataService';
 import Dashboard from './components/Dashboard';
@@ -17,9 +18,10 @@ import ProjectList from './components/ProjectList';
 import ProjectForm from './components/ProjectForm';
 import ProjectDetail from './components/ProjectDetail';
 import SettingsView from './components/SettingsView';
+import CalendarView from './components/CalendarView';
 
 const App = () => {
-  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, list, add, detail, settings
+  const [currentView, setCurrentView] = useState('dashboard'); // dashboard, list, add, detail, settings, calendar
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const [appData, setAppData] = useState(DataService.get());
 
@@ -37,11 +39,17 @@ const App = () => {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard data={appData} onProjectClick={navigateToDetail} />;
+        return <Dashboard 
+          data={appData} 
+          onProjectClick={navigateToDetail} 
+          onCalendarClick={() => setCurrentView('calendar')}
+        />;
       case 'list':
         return <ProjectList data={appData} onProjectClick={navigateToDetail} />;
       case 'add':
         return <ProjectForm onCancel={() => setCurrentView('list')} />;
+      case 'calendar':
+        return <CalendarView projects={appData.projects} onProjectClick={navigateToDetail} />;
       case 'detail':
         return <ProjectDetail 
           project={appData.projects.find(p => p.id === selectedProjectId)} 
@@ -51,7 +59,7 @@ const App = () => {
       case 'settings':
         return <SettingsView settings={appData.settings} />;
       default:
-        return <Dashboard data={appData} />;
+        return <Dashboard data={appData} onCalendarClick={() => setCurrentView('calendar')} />;
     }
   };
 
@@ -70,6 +78,13 @@ const App = () => {
           >
             <LayoutDashboard size={20} />
             <span>ダッシュボード</span>
+          </button>
+          <button 
+            className={`sidebar-item ${currentView === 'calendar' ? 'active' : ''}`} 
+            onClick={() => setCurrentView('calendar')}
+          >
+            <Calendar size={20} />
+            <span>カレンダー</span>
           </button>
           <button 
             className={`sidebar-item ${currentView === 'list' || currentView === 'add' || currentView === 'detail' ? 'active' : ''}`} 
@@ -95,7 +110,7 @@ const App = () => {
         </h2>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {currentView === 'list' && (
-            <button onClick={() => setCurrentView('add')} style={{ color: 'var(--primary)' }}>
+            <button onClick={() => setCurrentView('add')} style={{ color: 'var(--primary)', background: 'none', border: 'none' }}>
               <PlusCircle size={24} />
             </button>
           )}
@@ -110,7 +125,11 @@ const App = () => {
       <nav className="bottom-nav">
         <button className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`} onClick={() => setCurrentView('dashboard')}>
           <LayoutDashboard size={20} />
-          <span>ダッシュボード</span>
+          <span>ホーム</span>
+        </button>
+        <button className={`nav-item ${currentView === 'calendar' ? 'active' : ''}`} onClick={() => setCurrentView('calendar')}>
+          <Calendar size={20} />
+          <span>カレンダー</span>
         </button>
         <button className={`nav-item ${currentView === 'list' || currentView === 'add' || currentView === 'detail' ? 'active' : ''}`} onClick={() => setCurrentView('list')}>
           <ClipboardList size={20} />

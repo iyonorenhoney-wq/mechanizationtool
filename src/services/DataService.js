@@ -1,13 +1,52 @@
 const STORAGE_KEY = 'construction_management_data';
 
+export const STATUS_ORDER = [
+  'received', 
+  'survey', 
+  'proposal', 
+  'report', 
+  'budget', 
+  'quote', 
+  'ordered', 
+  'construction', 
+  'completed', 
+  'invoiced'
+];
+
+export const STATUS_LABELS = {
+  received: '依頼受領',
+  survey: '調査日',
+  proposal: '提案書作成',
+  report: '報告書作成',
+  budget: '予算書作成',
+  quote: '見積書作成',
+  ordered: '受注',
+  construction: '工事日',
+  completed: '工事完了',
+  invoiced: '請求書発行'
+};
+
+export const STATUS_COLORS = {
+  received: '#94a3b8',
+  survey: '#6366f1',
+  proposal: '#8b5cf6',
+  report: '#d946ef',
+  budget: '#f59e0b',
+  quote: '#10b981',
+  ordered: '#0ea5e9',
+  construction: '#2563eb',
+  completed: '#059669',
+  invoiced: '#475569'
+};
+
 const INITIAL_DATA = {
   projects: [],
   settings: {
     logo: null,
-    targetProfitMargin: 20,
     companyName: '株式会社 〇〇工事',
+    address: '',
+    isAdmin: true, // For simulation
   },
-  lastExported: null,
 };
 
 export const DataService = {
@@ -16,11 +55,9 @@ export const DataService = {
       const data = localStorage.getItem(STORAGE_KEY);
       if (!data) return INITIAL_DATA;
       const parsed = JSON.parse(data);
-      // Ensure basic structure exists
       return {
         projects: parsed.projects || [],
         settings: { ...INITIAL_DATA.settings, ...(parsed.settings || {}) },
-        lastExported: parsed.lastExported || null
       };
     } catch (e) {
       console.error('Data loading error', e);
@@ -30,7 +67,6 @@ export const DataService = {
 
   save: (data) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    // Trigger external event for "Automation Ready" (simulated)
     window.dispatchEvent(new CustomEvent('data_updated', { detail: data }));
   },
 
@@ -43,11 +79,21 @@ export const DataService = {
       history: [{ status: 'received', date: new Date().toISOString() }],
       tasks: [],
       notes: '',
-      documents: [],
-      revenue: 0,
-      costs: {
-        labor: 0,
-        material: 0,
+      documents: [], // { type, name, date, url }
+      // Fields from registration
+      propertyName: '',
+      requestContent: '',
+      address: '',
+      clientName: '',
+      memo: '',
+      // Dynamic fields filled during flow
+      surveyDate: null,
+      constructionDate: null,
+      billingInfo: {
+        name: '',
+        address: '',
+        paymentTerms: '',
+        closingTerms: '',
       },
       ...project,
     };
@@ -63,7 +109,6 @@ export const DataService = {
       const oldStatus = data.projects[index].status;
       data.projects[index] = { ...data.projects[index], ...updates };
       
-      // Automatic status handling: if status changed, add to history
       if (updates.status && updates.status !== oldStatus) {
         data.projects[index].history.push({
           status: updates.status,

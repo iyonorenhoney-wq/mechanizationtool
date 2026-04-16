@@ -2,21 +2,25 @@ import React, { useState } from 'react';
 import { 
   Building2, 
   Upload, 
-  Target, 
-  Download, 
   Save, 
   Info,
-  ExternalLink,
-  Table
+  ShieldCheck,
+  ShieldAlert,
+  Database,
+  Download,
+  MapPin,
+  Lock
 } from 'lucide-react';
 import { DataService } from '../services/DataService';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 
 const SettingsView = ({ settings }) => {
   const [formData, setFormData] = useState(settings);
   const [isSaved, setIsSaved] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(settings.isAdmin);
 
   const handleLogoUpload = (e) => {
+    if (!isAdmin) return;
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
@@ -28,165 +32,209 @@ const SettingsView = ({ settings }) => {
   };
 
   const handleSave = () => {
-    DataService.updateSettings(formData);
+    if (!isAdmin) return;
+    DataService.updateSettings({ ...formData, isAdmin });
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const exportToCSV = () => {
-    const data = DataService.get();
-    const headers = ['物件名', '担当者', 'ステータス', '売上', '原価', '利益', '利益率', '登録日'];
-    
-    const rows = data.projects.map(p => {
-      const costs = (p.costs?.labor || 0) + (p.costs?.material || 0);
-      const profit = (p.revenue || 0) - costs;
-      const margin = p.revenue > 0 ? ((profit / p.revenue) * 100).toFixed(1) : 0;
-      
-      return [
-        p.propertyName,
-        p.staffName || '',
-        p.status,
-        p.revenue || 0,
-        costs,
-        profit,
-        `${margin}%`,
-        format(parseISO(p.createdAt), 'yyyy/MM/dd')
-      ];
-    });
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
-    ].join('\n');
-
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `工事案件データ_${format(new Date(), 'yyyyMMdd')}.csv`;
-    link.click();
+  const handleToggleAdmin = () => {
+    const newState = !isAdmin;
+    setIsAdmin(newState);
+    DataService.updateSettings({ ...formData, isAdmin: newState });
   };
+
 
   return (
     <div className="fade-in">
-      <h1 className="text-xl mb-4">設定・管理</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <h1 className="text-xl" style={{ fontWeight: 800 }}>システム設定</h1>
+        <div 
+          onClick={handleToggleAdmin}
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '0.5rem', 
+            padding: '0.5rem 1rem', 
+            borderRadius: '2rem', 
+            background: isAdmin ? 'rgba(5, 150, 105, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+            color: isAdmin ? '#059669' : '#ef4444',
+            fontSize: '0.75rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            border: `1px solid ${isAdmin ? '#05966930' : '#ef444430'}`,
+            transition: 'all 0.2s'
+          }}
+        >
+          {isAdmin ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+          {isAdmin ? '管理者モード' : '一般ユーザー'}
+        </div>
+      </div>
 
-      <div className="card">
-        <h3 className="text-sm text-muted mb-4 flex items-center gap-2">
-          <Building2 size={16} /> 会社基本情報
+      <div className="card" style={{ marginBottom: '1.5rem', position: 'relative', overflow: 'hidden' }}>
+        {!isAdmin && (
+          <div style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            background: 'rgba(255, 255, 255, 0.6)', 
+            backdropFilter: 'blur(2px)', 
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: '1rem',
+            color: 'var(--text-muted)'
+          }}>
+            <Lock size={32} />
+            <p style={{ fontWeight: 700, fontSize: '0.875rem' }}>編集には管理者権限が必要です</p>
+          </div>
+        )}
+
+        <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Building2 size={18} className="text-primary" />
+          会社基本情報
         </h3>
         
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.5rem' }}>会社名（書類反映用）</label>
-          <input 
-            className="form-input"
-            value={formData.companyName}
-            onChange={e => setFormData({...formData, companyName: e.target.value})}
-            style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '1.25rem' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.5rem' }}>会社ロゴ</label>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            {formData.logo ? (
-              <img src={formData.logo} alt="Logo" style={{ width: '60px', height: '60px', borderRadius: '4px', border: '1px solid var(--border)', objectFit: 'contain' }} />
-            ) : (
-              <div style={{ width: '60px', height: '60px', background: '#f1f5f9', borderRadius: '4px', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Building2 size={24} color="#94a3b8" />
-              </div>
-            )}
-            <label style={{ 
-              padding: '0.5rem 1rem', 
-              background: 'white', 
-              border: '1px solid var(--border)', 
-              borderRadius: 'var(--radius)', 
-              fontSize: '0.875rem', 
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}>
-              <Upload size={16} />
-              変更する
-              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
-            </label>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.5rem' }}>目標利益率 (%)</label>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <Target size={18} color="var(--primary)" />
+        <div style={{ display: 'grid', gap: '1.25rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>会社名</label>
             <input 
-              type="number"
+              readOnly={!isAdmin}
               className="form-input"
-              value={formData.targetProfitMargin}
-              onChange={e => setFormData({...formData, targetProfitMargin: Number(e.target.value)})}
-              style={{ width: '80px', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+              value={formData.companyName}
+              onChange={e => setFormData({...formData, companyName: e.target.value})}
+              style={{ width: '100%', padding: '0.875rem', borderRadius: '12px', border: '1px solid var(--border)', background: isAdmin ? 'white' : 'var(--surface-alt)', fontWeight: 600 }}
             />
           </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>※この値を下回るとダッシュボードでアラートが表示されます</p>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>住所</label>
+            <div style={{ position: 'relative' }}>
+              <MapPin size={16} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+              <input 
+                readOnly={!isAdmin}
+                className="form-input"
+                value={formData.address}
+                onChange={e => setFormData({...formData, address: e.target.value})}
+                style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: '12px', border: '1px solid var(--border)', background: isAdmin ? 'white' : 'var(--surface-alt)', fontWeight: 600 }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>会社ロゴ</label>
+            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+              <div style={{ 
+                width: '80px', 
+                height: '80px', 
+                borderRadius: '16px', 
+                border: '1px solid var(--border)', 
+                background: 'white',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                overflow: 'hidden'
+              }}>
+                {formData.logo ? (
+                  <img src={formData.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ) : (
+                  <Building2 size={32} color="var(--border)" />
+                )}
+              </div>
+              {isAdmin && (
+                <label style={{ 
+                  padding: '0.75rem 1.25rem', 
+                  background: 'white', 
+                  border: '1px solid var(--primary)', 
+                  borderRadius: '12px', 
+                  fontSize: '0.8125rem', 
+                  fontWeight: 700,
+                  color: 'var(--primary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <Upload size={16} />
+                  ロゴを変更
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} />
+                </label>
+              )}
+            </div>
+          </div>
         </div>
 
+        {isAdmin && (
+          <button 
+            onClick={handleSave}
+            style={{ 
+              width: '100%', 
+              background: isSaved ? 'var(--success)' : 'linear-gradient(135deg, var(--primary) 0%, #1d4ed8 100%)', 
+              color: 'white', 
+              padding: '1.125rem', 
+              borderRadius: '12px', 
+              fontWeight: 800,
+              fontSize: '1rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem',
+              boxShadow: '0 8px 16px -4px rgba(37, 99, 235, 0.3)',
+              border: 'none',
+              marginTop: '1.5rem',
+              cursor: 'pointer',
+              transition: 'all 0.3s'
+            }}
+          >
+            <Save size={20} />
+            {isSaved ? '保存しました' : '設定を更新する'}
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Database size={18} className="text-primary" />
+          データ管理
+        </h3>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem', lineHeight: '1.6' }}>
+          現在のシステム内にある全案件データをCSV形式で書き出します。<br />
+          バックアップや外部ツール（Excelなど）での分析にご利用ください。
+        </p>
         <button 
-          onClick={handleSave}
           style={{ 
             width: '100%', 
-            background: isSaved ? 'var(--success)' : 'var(--primary)', 
-            color: 'white', 
+            background: 'var(--surface-alt)', 
+            border: '1px solid var(--border)', 
+            color: 'var(--text)', 
             padding: '1rem', 
-            borderRadius: 'var(--radius)', 
+            borderRadius: '12px', 
             fontWeight: 700,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '0.5rem',
-            transition: 'background 0.3s'
+            cursor: 'pointer'
           }}
         >
-          <Save size={20} />
-          {isSaved ? '保存しました！' : '設定を保存する'}
+          <Download size={18} />
+          CSVデータをエクスポート
         </button>
       </div>
 
-      <div className="card">
-        <h3 className="text-sm text-muted mb-4 flex items-center gap-2">
-          <Table size={16} /> データ連携
+      <div className="card" style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '1px solid var(--border)', marginTop: '1.5rem' }}>
+        <h3 style={{ fontWeight: 800, fontSize: '0.875rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--primary)' }}>
+          <Info size={16} />
+          管理者の方へ
         </h3>
-        <p style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>会計ソフトや外部ツール連携用に、現在の全案件データをCSV形式で出力します。将来的なZapier/Make連携のプロトタイプとして活用可能です。</p>
-        <button 
-          onClick={exportToCSV}
-          style={{ 
-            width: '100%', 
-            background: 'white', 
-            border: '2px solid var(--primary)', 
-            color: 'var(--primary)', 
-            padding: '1rem', 
-            borderRadius: 'var(--radius)', 
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem'
-          }}
-        >
-          <Download size={20} />
-          全案件データをCSV出力
-        </button>
-      </div>
-
-      <div className="card" style={{ background: '#eff6ff', border: 'none' }}>
-        <h3 className="text-sm text-muted mb-2 flex items-center gap-2" style={{ color: 'var(--primary)' }}>
-          <Info size={16} /> 自動化連携のヒント
-        </h3>
-        <div style={{ fontSize: '0.875rem', color: '#1e40af' }}>
-          <p style={{ marginBottom: '0.5rem' }}>このアプリは「ステータス変更」をイベントとして管理しています。将来的に以下が可能です：</p>
-          <ul style={{ paddingLeft: '1.25rem' }}>
-            <li>受注時に自動でサンクスメール送信</li>
-            <li>請求書発行時にチャットツールへ通知</li>
-            <li>月間利益のGoogleスプレッドシート自動同期</li>
-          </ul>
-        </div>
+        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+          一般ユーザー（従業員）は会社情報の編集ができないように設定されています。<br />
+          SaaS導入時の権限管理はこの設定をベースに構築されます。
+        </p>
       </div>
     </div>
   );

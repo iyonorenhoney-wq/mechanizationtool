@@ -1,18 +1,15 @@
 import React, { useState } from 'react';
-import { X, Save, FileText, MapPin, User, Calendar } from 'lucide-react';
+import { X, Save, MapPin, User, FileText, StickyNote } from 'lucide-react';
 import { DataService } from '../services/DataService';
 
 const ProjectForm = ({ onCancel, initialData }) => {
   const [formData, setFormData] = useState(initialData || {
     propertyName: '',
+    requestContent: '',
     address: '',
-    description: '',
-    staffName: '',
-    revenue: 0,
-    costs: {
-      labor: 0,
-      material: 0
-    }
+    clientName: '',
+    memo: '',
+    staffName: '', // Keep for matching list requirements
   });
 
   const handleSubmit = (e) => {
@@ -28,99 +25,111 @@ const ProjectForm = ({ onCancel, initialData }) => {
   return (
     <div className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 className="text-xl">{initialData ? '案件編集' : '新規案件登録'}</h1>
-        <button onClick={onCancel} style={{ color: 'var(--text-muted)' }}><X /></button>
+        <h1 className="text-xl" style={{ fontWeight: 800, color: 'var(--text)' }}>
+          {initialData ? '案件情報の編集' : '新規案件登録'}
+        </h1>
+        <button 
+          onClick={onCancel} 
+          style={{ width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-alt)', color: 'var(--text-muted)' }}
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '1rem' }}>
-        <div className="card" style={{ padding: '1rem' }}>
-          <h3 className="text-sm text-muted mb-3">基本情報</h3>
-          
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>物件名（必須）</label>
+        <div className="card" style={{ padding: '1.25rem', border: '1px solid var(--border)' }}>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              物件名 <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
             <input 
               required
               className="form-input"
               value={formData.propertyName}
               onChange={e => setFormData({...formData, propertyName: e.target.value})}
-              placeholder="例：〇〇ビル 大規模修繕"
-              style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+              placeholder="例：〇〇マンション 101号室"
+              style={{ width: '100%', padding: '0.875rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem' }}
             />
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>住所</label>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <MapPin size={16} color="var(--text-muted)" />
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              工事依頼内容
+            </label>
+            <div style={{ position: 'relative' }}>
+              <FileText size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+              <input 
+                className="form-input"
+                value={formData.requestContent}
+                onChange={e => setFormData({...formData, requestContent: e.target.value})}
+                placeholder="例：排水管つまりの解消、床材の張り替え"
+                style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem' }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              住所
+            </label>
+            <div style={{ position: 'relative' }}>
+              <MapPin size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
               <input 
                 className="form-input"
                 value={formData.address}
                 onChange={e => setFormData({...formData, address: e.target.value})}
-                placeholder="物件の所在地"
-                style={{ flex: 1, padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+                placeholder="現場の所在地を入力"
+                style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem' }}
               />
             </div>
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>担当者名</label>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <User size={16} color="var(--text-muted)" />
-              <input 
-                className="form-input"
-                value={formData.staffName}
-                onChange={e => setFormData({...formData, staffName: e.target.value})}
-                placeholder="担当者の氏名"
-                style={{ flex: 1, padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
-              />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                依頼者名
+              </label>
+              <div style={{ position: 'relative' }}>
+                <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+                <input 
+                  className="form-input"
+                  value={formData.clientName}
+                  onChange={e => setFormData({...formData, clientName: e.target.value})}
+                  placeholder="例：山田 太郎 様"
+                  style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem' }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                自社担当者
+              </label>
+              <div style={{ position: 'relative' }}>
+                <User size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+                <input 
+                  className="form-input"
+                  value={formData.staffName}
+                  onChange={e => setFormData({...formData, staffName: e.target.value})}
+                  placeholder="自社の担当者名"
+                  style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem' }}
+                />
+              </div>
             </div>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>依頼内容・メモ</label>
-            <textarea 
-              className="form-input"
-              rows={3}
-              value={formData.description}
-              onChange={e => setFormData({...formData, description: e.target.value})}
-              placeholder="工事の概要、特記事項など"
-              style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', fontFamily: 'inherit' }}
-            />
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: '1rem' }}>
-          <h3 className="text-sm text-muted mb-3">収支計画 (概算)</h3>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>売上金額</label>
-              <input 
-                type="number"
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              メモ
+            </label>
+            <div style={{ position: 'relative' }}>
+              <StickyNote size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
+              <textarea 
                 className="form-input"
-                value={formData.revenue}
-                onChange={e => setFormData({...formData, revenue: Number(e.target.value)})}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>工事原価 (労務費)</label>
-              <input 
-                type="number"
-                className="form-input"
-                value={formData.costs.labor}
-                onChange={e => setFormData({...formData, costs: {...formData.costs, labor: Number(e.target.value)}})}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
-              />
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: '0.25rem' }}>材料費・交通費</label>
-              <input 
-                type="number"
-                className="form-input"
-                value={formData.costs.material}
-                onChange={e => setFormData({...formData, costs: {...formData.costs, material: Number(e.target.value)}})}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}
+                rows={4}
+                value={formData.memo}
+                onChange={e => setFormData({...formData, memo: e.target.value})}
+                placeholder="補足事項や注意点など"
+                style={{ width: '100%', padding: '0.875rem 0.875rem 0.875rem 2.5rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', fontSize: '1rem', fontFamily: 'inherit' }}
               />
             </div>
           </div>
@@ -129,20 +138,24 @@ const ProjectForm = ({ onCancel, initialData }) => {
         <button 
           type="submit" 
           style={{ 
-            background: 'var(--primary)', 
+            background: 'linear-gradient(135deg, var(--primary) 0%, #1d4ed8 100%)', 
             color: 'white', 
-            padding: '1rem', 
+            padding: '1.25rem', 
             borderRadius: 'var(--radius)', 
-            fontWeight: 700,
+            fontWeight: 800,
+            fontSize: '1.125rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.3)'
+            gap: '0.75rem',
+            boxShadow: '0 12px 24px -8px rgba(37, 99, 235, 0.4)',
+            border: 'none',
+            cursor: 'pointer',
+            marginTop: '0.5rem'
           }}
         >
-          <Save size={20} />
-          {initialData ? '更新する' : '案件を登録する'}
+          <Save size={22} />
+          {initialData ? '変更を保存する' : 'この案件を登録する'}
         </button>
       </form>
     </div>
