@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Save, MapPin, User, FileText, StickyNote, AlertCircle, Loader2 } from 'lucide-react';
 import { DataService } from '../services/DataService';
 
-const ProjectForm = ({ onCancel, initialData }) => {
+const ProjectForm = ({ onCancel, initialData, user }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [formData, setFormData] = useState(initialData || {
@@ -26,13 +26,15 @@ const ProjectForm = ({ onCancel, initialData }) => {
 
     try {
       if (initialData) {
-        DataService.updateProject(initialData.id, formData);
+        await DataService.updateProject(initialData.id, formData);
       } else {
-        DataService.addProject(formData);
+        await DataService.addProject(formData, user?.companyId);
       }
+      
+      // Delay slightly for visual feedback
       setTimeout(() => {
         onCancel();
-      }, 500);
+      }, 300);
     } catch (err) {
       console.error('Submit Error:', err);
       setError('保存中にエラーが発生しました。もう一度お試しください。');
